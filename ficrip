@@ -1,0 +1,100 @@
+#! /usr/bin/env ruby
+# Copyright 2016 Katherine Whitlock (toroidalcode)
+
+require 'nokogiri'
+require 'open-uri'
+require 'gepub'
+require 'ruby-progressbar'
+
+$stdout.sync = true
+
+storyid = Integer(ARGV[0]) rescue Integer(URI.parse(ARGV[0]).path.split('/')[2])
+base_url = "https://www.fanfiction.net/s/#{storyid}/"
+
+primary = Nokogiri::HTML open(base_url)
+
+epub = GEPUB::Book.new
+epub.primary_identifier(base_url, 'BookId', 'URL')
+epub.epub_backward_compat = false
+
+# Title
+title = primary.css('#profile_top > b').first.text
+epub.add_title(title, nil, GEPUB::TITLE_TYPE::MAIN)
+
+# Author
+author = primary.css('#profile_top > a:nth-child(5)').first
+author_url = URI.join(base_url, author['href'])
+author = author.text
+epub.creator = author
+
+# Cover image
+cover_url = URI.join(base_url, primary.css('img.lazy.cimage').first['data-original'])
+epub.add_item('img/cover_image.jpg', open(cover_url, 'Referer' => base_url)).cover_image
+
+coverpage = <<COVERPAGE
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <title>Cover</title>
+    <style type="text/css" title="override_css">
+      @page {padding: 0pt; margin:0pt}
+      body { text-align: center; padding:0pt; margin: 0pt; }
+    </style>
+  </head>
+  <body>
+    <div style="text-align: center;">
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="100%" height="100%" viewBox="0 0 1200 1600" preserveAspectRatio="true">
+        <image width="100%" height="100%" xlink:href="../Images/cover_image.jpg"></image>
+      </svg>
+    </div>
+  </body>
+</html>
+COVERPAGE
+
+# Get the contents of the first chapter selector at the top of the page
+chapters = primary.css('select#chap_select').first.children.map(&:text)
+progressbar = ProgressBar.create(format: "#{author} - #{title} | %a [%B]  %p%%",
+                                 progress_mark: '#',
+                                 remainder_mark: '-',
+                                 total: chapters.count)
+
+# Bind the book
+epub.ordered do
+  epub.add_item('text/coverpage.xhtml')
+      .add_content(StringIO.new(coverpage))
+
+  chapters.each do |chapter|
+    progressbar.increment
+    chapter_num, chapter_title = chapter.match(/^(\d+)\s*[-\\.)]?\s+(.*)/).captures
+    chapter_page = Nokogiri::HTML(open(URI.join(base_url, chapter_num)))
+
+    storytext = chapter_page.css('#storytext').first
+    storytext.xpath(format('//p[contains(text(), "%s")]', chapter)).remove
+
+    chapter_xhtml = <<-XHTML
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+  <head>
+    <title>Chapter #{chapter_num}</title>
+  </head>
+  <body>
+    <section epub:type="chapter">
+      <h1 style="text-align:center">#{chapter_title}</h1>
+      #{storytext.children.to_xhtml}
+    </section>
+  </body>
+</html>
+XHTML
+
+    epub.add_item(format('text/chapter%03d.xhtml', chapter_num))
+        .add_content(StringIO.new(chapter_xhtml))
+        .toc_text(chapter_title)
+  end
+end
+
+filename = File.join(File.dirname(__FILE__), "#{author} - #{title}.epub")
+
+epub.generate_epub filename
