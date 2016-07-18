@@ -1,7 +1,5 @@
-source "https://rubygems.org"
+source 'https://rubygems.org'
 
-gem 'nokogiri'
-gem 'ruby-progressbar'
-gem 'gepub', :git => 'https://github.com/toroidal-code/gepub.git'
-
-
+# Specify your gem's dependencies in ficrip.gemspec
+gemspec
+gem 'gepub', github: 'toroidal-code/gepub'
