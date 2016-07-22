@@ -16,6 +16,8 @@ module Ficrip
     base_url     = "https://www.fanfiction.net/s/#{storyid}/"
     primary_page = Nokogiri::HTML open(base_url)
 
+    raise(ArgumentError.new("Invalid StoryID #{storyid}")) if primary_page.css('#profile_top').count == 0
+
     title  = primary_page.css('#profile_top > b').first.text
     author = primary_page.css('#profile_top > a').first.text
 
