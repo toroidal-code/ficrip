@@ -45,8 +45,10 @@ module Ficrip
     end
 
     # Contract { version: Maybe[Or[2, 3]] }
-    def bind(version: 3, callback: nil)
-
+    def bind(options = {})
+      options = {version: 3, callback: nil}.merge options
+      version = options[:version]
+      callback = options[:callback]
 
       book = GEPUB::Book.new('OEPBS/package.opf', 'version' => version.to_f.to_s)
       book.primary_identifier(@url, 'BookId', 'URL')

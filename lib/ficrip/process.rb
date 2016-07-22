@@ -51,9 +51,9 @@ module Ficrip
     end
   end
 
-  Contract Integer => GEPUB::Book
-  def self.get(storyid, version: 3)
-    fetch(storyid).bind(version: version)
+  def self.get(storyid, options = {})
+    options = {version: 3}.merge options
+    fetch(storyid).bind(version: options[:version])
   end
 
 end
