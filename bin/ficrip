@@ -5,27 +5,29 @@ require 'slop'
 require 'ruby-progressbar'
 require 'ficrip'
 
-opts = Slop.parse do |o|
-  o.banner = "usage: #{$0} [options] [<storyid/url>...]"
-  o.bool '--epub2', 'generate strict EPUB2 files instead of EPUB3 (e.g. for Google Play)'
-  o.bool '--verbose', 'enable verbose mode'
-  o.bool '-q', '--quiet', 'suppress output (quiet mode)'
-  o.on '-v', '--version', 'print the version' do
+opts = Slop.new do
+  banner = "usage: #{$0} [options] [<storyid/url>...]"
+  on '--epub2', 'generate strict EPUB2 files instead of EPUB3 (e.g. for Google Play)'
+  on '--verbose', 'enable verbose mode'
+  on '-q', '--quiet', 'suppress output (quiet mode)'
+  on '-v', '--version', 'print the version' do
     puts Ficrip::VERSION
     exit
   end
-  o.on '-h', '--help' do
+  on '-h', '--help' do
     puts o
     exit
   end
 end
 
-if opts.args.empty?
+args = opts.parse! ARGV
+
+if args.empty?
   puts opts
   exit -1
 end
 
-storyids = opts.args.map do |a|
+storyids = args.map do |a|
   if a =~ Regexp.new('fanfiction.net/s/(\d+)', true)
     Integer $1
   else
