@@ -32,8 +32,8 @@ module Ficrip
       s.review_count   = info.find_with('Reviews:').parse_int
       s.favs_count     = info.find_with('Favs:').parse_int
       s.follows_count  = info.find_with('Follows:').parse_int
-      s.updated_date   = info.find_with('Updated:').as {|d| Date.parse(d) if d }
-      s.published_date = Date.parse info.find_with('Published:')
+      s.updated_date   = info.find_with('Updated:').as {|d| Date.strptime(d, '%m/%d/%y') if d }
+      s.published_date = info.find_with('Published:').as {|d| Date.strptime(d,'%m/%d/%y') }
       s.info_id        = info.find_with('id:').to_i
 
       raise(Exception.new("Error! StoryID and parsed ID don't match.")) if s.info_id != storyid
