@@ -3,6 +3,8 @@ require 'gepub'
 require 'i18n_data'
 require 'fastimage'
 require 'open-uri'
+require 'chronic_duration'
+
 require_relative 'extensions'
 
 module Ficrip
@@ -23,18 +25,33 @@ module Ficrip
 
       info = primary_page.css('#profile_top > span.xgray.xcontrast_txt').text.split(' - ')
 
-      s.rating         = info.find_with 'Rated: Fiction'
-      s.language       = info[1]
-      s.genres         = info[2].split('/')
-      s.characters     = info[3].strip
-      s.chapter_count  = info.find_with('Chapters:').as {|c| c.parse_int unless c.nil? }
-      s.word_count     = info.find_with('Words:').parse_int
-      s.review_count   = info.find_with('Reviews:').parse_int
-      s.favs_count     = info.find_with('Favs:').parse_int
-      s.follows_count  = info.find_with('Follows:').parse_int
-      s.updated_date   = info.find_with('Updated:').as {|d| Date.strptime(d, '%m/%d/%y') if d }
-      s.published_date = info.find_with('Published:').as {|d| Date.strptime(d,'%m/%d/%y') }
-      s.info_id        = info.find_with('id:').to_i
+      s.rating        = info.find_with 'Rated: Fiction'
+      s.language      = info[1]
+      s.genres        = info[2].split('/')
+      s.characters    = info[3].strip
+      s.chapter_count = info.find_with('Chapters:').as { |c| c.parse_int unless c.nil? }
+      s.word_count    = info.find_with('Words:').parse_int
+      s.review_count  = info.find_with('Reviews:').parse_int
+      s.favs_count    = info.find_with('Favs:').parse_int
+      s.follows_count = info.find_with('Follows:').parse_int
+
+      s.updated_date = info.find_with('Updated:').as do |d|
+        begin
+          Date.strptime(d, '%m/%d/%Y')
+        rescue
+          Date.strptime(d, '%m/%d') rescue (Time.now - ChronicDuration.parse(d)).to_date
+        end if d
+      end
+
+      s.published_date = info.find_with('Published:').as do |d|
+        begin
+          Date.strptime(d, '%m/%d/%Y')
+        rescue
+          Date.strptime(d, '%m/%d') rescue (Time.now - ChronicDuration.parse(d)).to_date
+        end
+      end
+
+      s.info_id = info.find_with('id:').to_i
 
       raise(Exception.new("Error! StoryID and parsed ID don't match.")) if s.info_id != storyid
 
