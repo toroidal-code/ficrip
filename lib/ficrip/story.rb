@@ -125,7 +125,11 @@ module Ficrip
               .add_content(StringIO.new(Nokogiri::XML(chapter_xhtml){|c| c.noblanks}.to_xhtml(indent:2)))
               .toc_text(chapter_title)
 
-          callback.call if callback
+          if callback
+            args = [chapter_num.to_i, chapters.count]
+            n = callback.arity
+            callback.call *(n < 0 ? args : args.take(n))
+          end
         end
       end
       book
