@@ -41,6 +41,12 @@ module Ficrip
       end
     end
 
+    def respond_to_missing?(method_sym, include_private = false)
+      @metadata.key?(method_sym) ||
+          (method_sym != :title= && method_sym != :author= && method_sym.to_s.end_with?('=')) ||
+          super
+    end
+
     Contract Symbol, String => Story
     def add_metadata(key, value)
       @metadata[key] = value
