@@ -93,14 +93,35 @@ module Ficrip
         XHTML
       end
 
+      titlepage = <<-XHTML.strip_heredoc
+        <?xml version="1.0" encoding="utf-8"?>
+        #{DOCTYPE[version]}
+        <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+          <head>
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+            <title>#{@title}</title>
+            <style type="text/css" title="override_css">
+              .outer { display: table; position: absolute; height: 100%; width: 100%; }
+              .middle { display: table-cell; vertical-align: middle; }
+              .inner { margin-left: auto; margin-right: auto; text-align: center; }
+            </style>
+          </head>
+          <body>
+            <div class="outer"><div class="middle"><div class="inner">
+              <h1>#{@title}</h1>
+              <h3>#{@author}</h3>
+            </div></div></div>
+          </body>
+        </html>
+      XHTML
+
       book.ordered do
         book.add_item('img/coverpage.xhtml')
             .add_content(StringIO.new(coverpage))
             .toc_text(@title) if @metadata.key? :cover_url
 
-        unless @metadata[:chapters]
-          @metadata[:chapters] = @url
-        end
+      book.add_item('text/titlepage.xhtml')
+          .add_content(StringIO.new(Nokogiri::XML(titlepage){|c| c.noblanks}.to_xhtml(indent:2)))
 
         chapters.each do |chapter|
           chapter_num, chapter_title = chapter.match(/^(\d+)\s*[-\\.)]?\s+(.*)/).captures
