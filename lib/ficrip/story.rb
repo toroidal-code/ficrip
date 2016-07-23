@@ -7,7 +7,7 @@ module Ficrip
     include Contracts::Core
     include Contracts::Builtin
 
-    attr_accessor :title, :author, :metadata
+    attr_accessor :title, :author, :url, :metadata
 
     DOCTYPE = {
         3 => '<!DOCTYPE html>',
