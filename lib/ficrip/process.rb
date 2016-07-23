@@ -1,9 +1,11 @@
 require 'contracts'
-require 'gepub'
+require 'open-uri'
+
+# Helpers
 require 'i18n_data'
 require 'fastimage'
-require 'open-uri'
 require 'chronic_duration'
+require 'retryable'
 
 require_relative 'extensions'
 
@@ -14,7 +16,10 @@ module Ficrip
   Contract Integer => Story
   def self.fetch(storyid)
     base_url     = "https://www.fanfiction.net/s/#{storyid}/"
-    primary_page = Nokogiri::HTML open(base_url)
+
+    primary_page = Retryable.retryable(tries: :infinite, on: OpenURI::HTTPError) do
+      Nokogiri::HTML open(base_url)
+    end
 
     raise(ArgumentError.new("Invalid StoryID #{storyid}")) if primary_page.css('#profile_top').count == 0
 

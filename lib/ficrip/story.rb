@@ -1,5 +1,8 @@
 require 'contracts'
 require 'open-uri'
+require 'retryable'
+require 'gepub'
+
 require_relative 'extensions'
 
 module Ficrip
@@ -46,8 +49,6 @@ module Ficrip
 
     # Contract { version: Maybe[Or[2, 3]] }
     def bind(version: 3, callback: nil)
-
-
       book = GEPUB::Book.new('OEPBS/package.opf', 'version' => version.to_f.to_s)
       book.primary_identifier(@url, 'BookId', 'URL')
 
@@ -57,7 +58,7 @@ module Ficrip
 
       # Cover if it exists
       if @metadata.key? :cover_url
-        cover = open(@metadata[:cover_url], 'Referer' => @url)
+        cover = open!(@metadata[:cover_url], 'Referer' => @url)
         cover_type = FastImage.type(cover)
         book.add_item(format('img/cover_image.%s', cover_type), cover)
             .cover_image
@@ -97,7 +98,7 @@ module Ficrip
 
         chapters.each do |chapter|
           chapter_num, chapter_title = chapter.match(/^(\d+)\s*[-\\.)]?\s+(.*)/).captures
-          chapter_page               = Nokogiri::HTML open(URI.join(@url, chapter_num))
+          chapter_page               = Nokogiri::HTML open!(URI.join(@url, chapter_num))
 
           storytext = chapter_page.css('#storytext').first
           storytext.xpath('//@noshade').remove
@@ -120,8 +121,7 @@ module Ficrip
             </html>
           XHTML
 
-          book.add_item(format('text/chapter%03d.xhtml', chapter_num),
-                        nil, "c#{chapter_num}")
+          book.add_item(format('text/chapter%03d.xhtml', chapter_num), nil, "c#{chapter_num}")
               .add_content(StringIO.new(Nokogiri::XML(chapter_xhtml){|c| c.noblanks}.to_xhtml(indent:2)))
               .toc_text(chapter_title)
 
@@ -129,6 +129,13 @@ module Ficrip
         end
       end
       book
+    end
+
+    private
+    def open!(*args, &block)
+      Retryable.retryable(tries: :infinite, on: OpenURI::HTTPError) do
+        open(*args, &block)
+      end
     end
   end
 end
