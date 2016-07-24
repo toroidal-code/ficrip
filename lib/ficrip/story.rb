@@ -2,7 +2,6 @@ require 'contracts'
 require 'open-uri'
 require 'retryable'
 require 'gepub'
-require 'deep_clone'
 
 require_relative 'extensions'
 
@@ -174,7 +173,7 @@ module Ficrip
 
       # This generates a proper Table of Contents page at the start of the book by
       # removing references to the cover and TOC itself
-      book_copy = DeepClone.clone book
+      book_copy = book.deep_clone
       cut_idx   = @metadata.key?(:cover_url) ? 3 : 2
       book_copy.instance_variable_set(:@toc, book_copy.instance_variable_get(:@toc)[cut_idx..-1])
       table_of_contents.add_content(StringIO.new(book_copy.nav_doc)) # Finally, we get to add the actual content
