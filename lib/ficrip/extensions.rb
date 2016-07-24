@@ -1,3 +1,5 @@
+
+
 class Array
   def find_with(str)
     r = find { |i| i.start_with? str }
@@ -24,6 +26,7 @@ class Object
   # From http://stackoverflow.com/a/8206537
   def deep_clone
     return @deep_cloning_obj if @deep_cloning
+    return self if instance_of?(String) && frozen?
     @deep_cloning_obj = clone
     @deep_cloning_obj.instance_variables.each do |var|
       val = @deep_cloning_obj.instance_variable_get(var)
