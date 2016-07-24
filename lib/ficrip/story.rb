@@ -2,6 +2,7 @@ require 'contracts'
 require 'open-uri'
 require 'retryable'
 require 'gepub'
+require 'deep_clone'
 
 require_relative 'extensions'
 
@@ -48,6 +49,7 @@ module Ficrip
     end
 
     Contract Symbol, String => Story
+
     def add_metadata(key, value)
       @metadata[key] = value
       self
@@ -64,7 +66,7 @@ module Ficrip
 
       # Cover if it exists
       if @metadata.key? :cover_url
-        cover = open!(@metadata[:cover_url], 'Referer' => @url)
+        cover      = open!(@metadata[:cover_url], 'Referer' => @url)
         cover_type = FastImage.type(cover)
         book.add_item(format('img/cover_image.%s', cover_type), cover)
             .cover_image
@@ -101,9 +103,9 @@ module Ficrip
             <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
             <title>#{@title}</title>
             <style type="text/css" title="override_css">
-              .outer { display: table; position: absolute; height: 100%; width: 100%; }
+              .outer { display: table; height: 75%; width: 100%; }
               .middle { display: table-cell; vertical-align: middle; }
-              .inner { margin-left: auto; margin-right: auto; text-align: center; }
+              .inner { text-align: center; }
             </style>
           </head>
           <body>
@@ -115,13 +117,23 @@ module Ficrip
         </html>
       XHTML
 
+
+      table_of_contents = nil
       book.ordered do
         book.add_item('img/coverpage.xhtml')
             .add_content(StringIO.new(coverpage))
             .toc_text(@title) if @metadata.key? :cover_url
 
-      book.add_item('text/titlepage.xhtml')
-          .add_content(StringIO.new(Nokogiri::XML(titlepage){|c| c.noblanks}.to_xhtml(indent:2)))
+        book.add_item('text/titlepage.xhtml')
+            .add_content(StringIO.new(Nokogiri::XML(titlepage) { |c| c.noblanks }.to_xhtml(indent: 2)))
+
+        book.add_item('text/infopage.xhtml')
+            .add_content(StringIO.new(Nokogiri::XML(render_metadata) { |c| c.noblanks }.to_xhtml(indent: 2)))
+            .toc_text('About')
+
+        # We want our TOC to be after the cover and titlepage, but we don't any content
+        # for it yet, so we save it for later.
+        table_of_contents = book.add_item('text/toc.xhtml').toc_text('Table of Contents')
 
         chapters.each do |chapter|
           chapter_num, chapter_title = chapter.match(/^(\d+)\s*[-\\.)]?\s+(.*)/).captures
@@ -143,23 +155,76 @@ module Ficrip
                 #{'<section epub:type="chapter">' if version == 3}
                   <h1 style="text-align:center">#{chapter_title}</h1>
                   #{storytext.children.to_xhtml}
-                #{'</section>' if version == 3}
+          #{'</section>' if version == 3}
               </body>
             </html>
           XHTML
 
           book.add_item(format('text/chapter%03d.xhtml', chapter_num), nil, "c#{chapter_num}")
-              .add_content(StringIO.new(Nokogiri::XML(chapter_xhtml){|c| c.noblanks}.to_xhtml(indent:2)))
+              .add_content(StringIO.new(Nokogiri::XML(chapter_xhtml) { |c| c.noblanks }.to_xhtml(indent: 2)))
               .toc_text(chapter_title)
 
           if callback
             args = [chapter_num.to_i, chapters.count]
-            n = callback.arity
+            n    = callback.arity
             callback.call *(n < 0 ? args : args.take(n))
           end
         end
       end
+
+      # This generates a proper Table of Contents page at the start of the book by
+      # removing references to the cover and TOC itself
+      book_copy = DeepClone.clone book
+      cut_idx   = @metadata.key?(:cover_url) ? 3 : 2
+      book_copy.instance_variable_set(:@toc, book_copy.instance_variable_get(:@toc)[cut_idx..-1])
+      table_of_contents.add_content(StringIO.new(book_copy.nav_doc)) # Finally, we get to add the actual content
+
+      # Now that we've generated the TOC page, go through every chapter reference in the
+      # toc and prepend the chapter number. This is for the epub's built-in table of contents
+      book.instance_variable_get(:@toc)[cut_idx..-1].each_with_index do |chap, idx|
+        chap[:text] = "#{idx + 1}. #{chap[:text]}"
+      end
+
+      add_item('nav.html', StringIO.new(book_copy.nav_doc), 'nav').add_property('nav') if version == 3
+
       book
+    end
+
+    def render_metadata
+      data = {
+          'Rating'              => rating,
+          'Language'            => language,
+          'Genres'              => genres.join(', '),
+          'Characters/Pairings' => characters,
+          'Chapter count'       => format_num(chapter_count),
+          'Word count'          => format_num(word_count),
+          'Reviews'             => "<a href='https://fanfiction.com/r/#{info_id}'>" + format_num(review_count) + '</a>',
+          'Favorites'           => format_num(favs_count),
+          'Follows'             => format_num(follows_count),
+          'Updated'             => updated_date,
+          'Published'           => published_date,
+          'ID'                  => info_id
+      }
+
+      Nokogiri::XML::Builder.new(encoding: 'utf-8') { |doc|
+        doc.html('xmlns' => 'http://www.w3.org/1999/xhtml', 'xml:lang' => 'en') {
+          doc.head {
+            doc.meta 'http-equiv' => 'Content-Type', 'content' => 'text/html; charset=UTF-8'
+            doc.title 'About'
+          }
+          doc.body {
+            doc.p { doc.strong 'Author: '; doc.a(href: author_url) { doc.text @author } }
+            doc.p { doc.strong 'Summary:'; doc.br; doc.text summary }
+            data.each do |k, v|
+              doc.span {
+                doc.strong(k + ':')
+                (v.to_s.start_with? '<a') ? doc << v.to_s : doc.text(' ' + v.to_s)
+                doc.br
+              }
+            end
+          }
+        }
+      }.to_xml
     end
 
     private
@@ -167,6 +232,27 @@ module Ficrip
       Retryable.retryable(tries: :infinite, on: OpenURI::HTTPError) do
         open(*args, &block)
       end
+    end
+
+    def handle_url(string)
+      if string.start_with? 'https://www.fanfiction.net/u/'
+        "<a href='#{string}'>"
+      end
+    end
+
+    # # File activesupport/lib/active_support/inflector/methods.rb, line 123
+    # def humanize(word, capitalize: false)
+    #   result = word.to_s.dup
+    #   result.sub!(/\A_+/, ''.freeze)
+    #   result.sub!(/_id\z/, ''.freeze)
+    #   result.tr!('_'.freeze, ' '.freeze)
+    #   result.gsub!(/([a-z\d]*)/i) { |match| match.downcase }
+    #   result.sub!(/\A\w/) { |match| match.upcase } if capitalize
+    #   result
+    # end
+
+    def format_num(num)
+      num.to_s.reverse.gsub(/...(?=.)/, '\&,').reverse
     end
   end
 end
