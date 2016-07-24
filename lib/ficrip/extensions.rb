@@ -45,3 +45,25 @@ class Object
     deep_cloning_obj
   end
 end
+
+class Result
+  attr_accessor :result, :initial
+  def initialize(val, res = nil)
+    @initial = val
+    @result = res
+  end
+end
+
+class Object
+  def try
+    begin
+      if instance_of? Result
+        return @result ? self : Result.new(@initial, yield(@initial))
+      else
+        return Result.new(self, yield(self))
+      end
+    rescue
+      return instance_of?(Result) ? self :  Result.new(self)
+    end
+  end
+end

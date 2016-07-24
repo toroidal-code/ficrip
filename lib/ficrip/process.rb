@@ -13,9 +13,16 @@ module Ficrip
   include Contracts::Core
   include Contracts::Builtin
 
-  Contract Integer => Story
-  def self.fetch(storyid)
-    base_url     = "https://www.fanfiction.net/s/#{storyid}/"
+  Contract Or[Nat,String] => Story
+  def self.fetch(storyid_or_url)
+    storyid = begin
+      storyid_or_url =~ Regexp.new('fanfiction.net/s/(\d+)', true)
+      Integer ($1 || storyid_or_url)
+    rescue
+      raise ArgumentError.new("\"#{storyid_or_url}\" is not a fanfiction.net URL or a StoryID")
+    end
+
+    base_url = "https://www.fanfiction.net/s/#{storyid}/"
 
     primary_page = Retryable.retryable(tries: :infinite, on: OpenURI::HTTPError) do
       Nokogiri::HTML open(base_url)
@@ -42,25 +49,24 @@ module Ficrip
       s.favs_count    = info.find_with('Favs:').parse_int
       s.follows_count = info.find_with('Follows:').parse_int
 
-      s.updated_date = info.find_with('Updated:').as do |d|
-        begin
-          Date.strptime(d, '%m/%d/%Y')
-        rescue
-          Date.strptime(d, '%m/%d') rescue (Time.now - ChronicDuration.parse(d)).to_date
-        end if d
-      end
+      s.updated_date =
+          info.find_with('Updated:')
+              .try { |d| Date.strptime(d, '%m/%d/%Y') }
+              .try { |d| Date.strptime(d, '%m/%d') }
+              .try { |d| (Time.now - ChronicDuration.parse(d)).to_date }
+              .result
 
-      s.published_date = info.find_with('Published:').as do |d|
-        begin
-          Date.strptime(d, '%m/%d/%Y')
-        rescue
-          Date.strptime(d, '%m/%d') rescue (Time.now - ChronicDuration.parse(d)).to_date
-        end
-      end
+      s.published_date =
+          info.find_with('Published:')
+              .try { |d| Date.strptime(d, '%m/%d/%Y') }
+              .try { |d| Date.strptime(d, '%m/%d') }
+              .try { |d| (Time.now - ChronicDuration.parse(d)).to_date }
+              .result
+
 
       s.info_id = info.find_with('id:').to_i
 
-      raise(Exception.new("Error! StoryID and parsed ID don't match.")) if s.info_id != storyid
+      raise Exception.new("Error! StoryID and parsed ID don't match.") if s.info_id != storyid
 
       cover_elem     = primary_page.css('img.lazy.cimage').first
       s.cover_url    = URI.join(base_url, cover_elem['data-original']) if cover_elem
@@ -75,9 +81,8 @@ module Ficrip
     end
   end
 
-  Contract Integer => GEPUB::Book
-  def self.get(storyid, version: 3)
-    fetch(storyid).bind(version: version)
+  Contract Or[Nat,String] => GEPUB::Book
+  def self.get(storyid_or_url, version: 3)
+    fetch(storyid_or_url).bind(version: version)
   end
-
 end

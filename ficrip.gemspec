@@ -23,9 +23,10 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'slop', '~> 4.3'
   spec.add_dependency 'contracts', '~> 0.14'
   spec.add_dependency 'i18n_data', '~> 0.7'
-  spec.add_dependency 'fastimage', '~> 1.8'
+  spec.add_dependency 'fastimage', '~> 2.0'
   spec.add_dependency 'chronic_duration', '~> 0.10'
   spec.add_dependency 'retryable', '~> 2.0'
+  spec.add_dependency 'mimemagic', '~> 0.3'
 
   spec.add_development_dependency 'bundler'
   spec.add_development_dependency 'rake'

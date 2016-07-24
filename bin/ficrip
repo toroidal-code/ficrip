@@ -7,6 +7,7 @@ require 'ficrip'
 
 opts = Slop.parse do |o|
   o.banner = "usage: #{$0} [options] [<storyid/url>...]"
+  o.string '-c', '--cover', 'provide a cover image to use'
   o.bool '--epub2', 'generate strict EPUB2 files instead of EPUB3 (e.g. for Google Play)'
   o.bool '--verbose', 'enable verbose mode'
   o.bool '-q', '--quiet', 'suppress output (quiet mode)'
@@ -25,16 +26,15 @@ if opts.args.empty?
   exit -1
 end
 
+# We do this here as well as in Ficrip#process so that
+# we fail fast and don't run any of the stories
 storyids = opts.args.map do |a|
-  if a =~ Regexp.new('fanfiction.net/s/(\d+)', true)
-    Integer $1
-  else
-    begin
-      Integer a
-    rescue ArgumentError
-      $stderr.puts "Error! \"#{a}\" is not a valid fanfiction.net URL or StoryID"
-      $errored = true
-    end
+  a =~ Regexp.new('fanfiction.net/s/(\d+)', true)
+  begin
+    Integer ($1||a)
+  rescue ArgumentError || TypeError
+    $stderr.puts "Error! \"#{a}\" is not a valid fanfiction.net URL or StoryID"
+    $errored = true
   end
 end
 
@@ -50,14 +50,14 @@ storyids.each_with_index do |storyid, idx|
 
   author_title = "#{fic.author} - #{fic.title}"
 
-  progressbar.total = fic.chapters.count
+  progressbar.total  = fic.chapters.count
   progressbar.format = prefix + "#{author_title} | %a [%B] %p%% (%c/%C)"
 
 
-  epub = fic.bind(version: opts[:epub2] ? 2 : 3, callback: lambda { progressbar.increment })
+  epub = fic.bind(version: opts[:epub2] ? 2 : 3, cover: opts[:cover], callback: lambda { progressbar.increment })
 
   progressbar.format = prefix + "#{author_title}... Binding"
-  filename = File.join(Dir.pwd, "#{author_title}.epub")
+  filename           = File.join(Dir.pwd, "#{author_title}.epub")
   epub.generate_epub filename
 
   progressbar.format = prefix + "#{author_title}... Done!"

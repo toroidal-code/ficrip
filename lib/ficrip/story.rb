@@ -2,6 +2,7 @@ require 'contracts'
 require 'open-uri'
 require 'retryable'
 require 'gepub'
+require 'mimemagic'
 
 require_relative 'extensions'
 
@@ -48,14 +49,13 @@ module Ficrip
     end
 
     Contract Symbol, String => Story
-
     def add_metadata(key, value)
       @metadata[key] = value
       self
     end
 
-    # Contract { version: Maybe[Or[2, 3]] }
-    def bind(version: 3, callback: nil)
+    Contract KeywordArgs[ version: Maybe[Or[2, 3]], cover:Or[File,Tempfile,String], callback: Proc ] => GEPUB::Book
+    def bind(version: 3, cover: nil, callback: nil)
       book = GEPUB::Book.new('OEPBS/package.opf', 'version' => version.to_f.to_s)
       book.primary_identifier(@url, 'BookId', 'URL')
 
@@ -63,12 +63,33 @@ module Ficrip
       book.title    = @title
       book.creator  = @author
 
+
+      cover = cover.is_a?(String) ? cover.try {|c| open c }.result : cover
+
+
       # Cover if it exists
-      if @metadata.key? :cover_url
-        cover      = open!(@metadata[:cover_url], 'Referer' => @url)
-        cover_type = FastImage.type(cover)
+      if cover || @metadata.key?(:cover_url)
+        mime_types = GEPUB::Mime.mime_types.map {|k,v| [extract_first_option(k).to_sym, v]}.to_h.invert
+        cover = open!(@metadata[:cover_url], 'Referer' => @url) unless cover
+        cover_type = FastImage.type(cover) || mime_types[MimeMagic.by_magic(cover)]
+
+        raise ArgumentError.new('Type of cover image could not be determined') unless cover_type
+
         book.add_item(format('img/cover_image.%s', cover_type), cover)
             .cover_image
+
+        normal_fragment = <<-XML.strip_heredoc
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1"
+               width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <image width="100%" height="100%" xlink:href="cover_image.#{cover_type}"></image>
+          </svg>
+        XML
+
+        svg_fragment = <<-XML.strip_heredoc
+          <object type="image/svg+xml" data="cover_image.svg">
+            <!--<param name="src" value="cover_image.svg">-->
+          </object>
+        XML
 
         coverpage = <<-XHTML.strip_heredoc
           <?xml version="1.0" encoding="utf-8"?>
@@ -84,10 +105,7 @@ module Ficrip
             </head>
             <body>
               <div style="text-align: center;">
-                <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1"
-                     width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-                  <image width="100%" height="100%" xlink:href="cover_image.#{cover_type}"></image>
-                </svg>
+                #{ cover_type.equal?(:svg) ? svg_fragment : normal_fragment }
               </div>
             </body>
           </html>
@@ -120,7 +138,7 @@ module Ficrip
       table_of_contents = nil
       book.ordered do
         book.add_item('img/coverpage.xhtml')
-            .add_content(StringIO.new(coverpage))
+            .add_content(StringIO.new(Nokogiri::XML(coverpage) { |c| c.noblanks }.to_xhtml(indent: 2)))
             .toc_text(@title) if @metadata.key? :cover_url
 
         book.add_item('text/titlepage.xhtml')
@@ -132,7 +150,7 @@ module Ficrip
 
         # We want our TOC to be after the cover and titlepage, but we don't any content
         # for it yet, so we save it for later.
-        table_of_contents = book.add_item('text/toc.xhtml').toc_text('Table of Contents')
+        table_of_contents = book.add_item('text/toc.xhtml').toc_text('Table of Contents') if chapters.count > 1
 
         chapters.each do |chapter|
           chapter_num, chapter_title = chapter.match(/^(\d+)\s*[-\\.)]?\s+(.*)/).captures
@@ -173,16 +191,38 @@ module Ficrip
 
       # This generates a proper Table of Contents page at the start of the book by
       # removing references to the cover and TOC itself
-      book_copy = book.deep_clone
-      cut_idx   = @metadata.key?(:cover_url) ? 3 : 2
-      book_copy.instance_variable_set(:@toc, book_copy.instance_variable_get(:@toc)[cut_idx..-1])
-      table_of_contents.add_content(StringIO.new(book_copy.nav_doc)) # Finally, we get to add the actual content
+      cut_idx = 1 # About is always generated
+      cut_idx += 1 if @metadata.key?(:cover_url) # Cover
+      cut_idx -= 1 if table_of_contents.nil? # TOC
+
+      if table_of_contents
+        book_copy = book.deep_clone
+        book_copy.instance_variable_set(:@toc, book_copy.instance_variable_get(:@toc)[cut_idx..-1])
+
+
+        nav_doc = Nokogiri::XML(book_copy.nav_doc){|c| c.noblanks} # Load the nav_doc
+
+        # add a title element to the <head>
+        nav_doc.at_css('head').children.before  '<title>Table of Contents</title>'
+
+        # remove the <nav> element moving  the children to <body>
+        nav_doc.at_css('nav').tap {|n| n.parent << n.children }.remove
+
+        # Center the 'Table of Contents' at the top of the page
+        nav_doc.at('h1:contains("Table of Contents")')['style'] = 'text-align:center;'
+
+        # edit all of the links so they point to the right place
+        nav_doc.xpath("//@href[starts-with(.,'text/')]").each{|l| l.value = l.value.tap{|s| s.slice! 'text/'}}
+
+        # Finally, we get to add the actual content
+        table_of_contents.add_content(StringIO.new(nav_doc.to_xhtml(indent: 2)))
+      end
 
       # Now that we've generated the TOC page, go through every chapter reference in the
       # toc and prepend the chapter number. This is for the epub's built-in table of contents
       book.instance_variable_get(:@toc)[cut_idx..-1].each_with_index do |chap, idx|
         chap[:text] = "#{idx + 1}. #{chap[:text]}"
-      end
+      end if chapter_count > 1
 
       add_item('nav.html', StringIO.new(book_copy.nav_doc), 'nav').add_property('nav') if version == 3
 
@@ -214,13 +254,15 @@ module Ficrip
           doc.body {
             doc.p { doc.strong 'Author: '; doc.a(href: author_url) { doc.text @author } }
             doc.p { doc.strong 'Summary:'; doc.br; doc.text summary }
-            data.each do |k, v|
-              doc.span {
-                doc.strong(k + ':')
-                (v.to_s.start_with? '<a') ? doc << v.to_s : doc.text(' ' + v.to_s)
-                doc.br
-              }
-            end
+            doc.ul {
+              data.each do |k, v|
+                doc.li {
+                  doc.strong(k + ':')
+                  (v.to_s.start_with? '<a') ? doc << v.to_s : doc.text(' ' + v.to_s)
+                  doc.br
+                }
+              end
+            }
           }
         }
       }.to_xml
@@ -230,12 +272,6 @@ module Ficrip
     def open!(*args, &block)
       Retryable.retryable(tries: :infinite, on: OpenURI::HTTPError) do
         open(*args, &block)
-      end
-    end
-
-    def handle_url(string)
-      if string.start_with? 'https://www.fanfiction.net/u/'
-        "<a href='#{string}'>"
       end
     end
 
@@ -252,6 +288,11 @@ module Ficrip
 
     def format_num(num)
       num.to_s.reverse.gsub(/...(?=.)/, '\&,').reverse
+    end
+
+    def extract_first_option(regex)
+      match = regex.match(/.*\((.*)\).*/i)
+      match ? match.captures[0].split('|').first : regex
     end
   end
 end
