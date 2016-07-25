@@ -54,7 +54,9 @@ module Ficrip
       self
     end
 
-    Contract KeywordArgs[ version: Maybe[Or[2, 3]], cover:Or[File,Tempfile,String], callback: Proc ] => GEPUB::Book
+    Contract KeywordArgs[version:  Optional[Or[2, 3]],
+                         cover:    Optional[Maybe[Or[File, Tempfile, String]]],
+                         callback: Optional[Proc]] => GEPUB::Book
     def bind(version: 3, cover: nil, callback: nil)
       book = GEPUB::Book.new('OEPBS/package.opf', 'version' => version.to_f.to_s)
       book.primary_identifier(@url, 'BookId', 'URL')
@@ -195,8 +197,9 @@ module Ficrip
       cut_idx += 1 if @metadata.key?(:cover_url) # Cover
       cut_idx -= 1 if table_of_contents.nil? # TOC
 
+      book_copy = book.deep_clone
+
       if table_of_contents
-        book_copy = book.deep_clone
         book_copy.instance_variable_set(:@toc, book_copy.instance_variable_get(:@toc)[cut_idx..-1])
 
 
@@ -222,28 +225,28 @@ module Ficrip
       # toc and prepend the chapter number. This is for the epub's built-in table of contents
       book.instance_variable_get(:@toc)[cut_idx..-1].each_with_index do |chap, idx|
         chap[:text] = "#{idx + 1}. #{chap[:text]}"
-      end if chapter_count > 1
+      end if chapters.count > 1
 
-      add_item('nav.html', StringIO.new(book_copy.nav_doc), 'nav').add_property('nav') if version == 3
+      book.add_item('nav.html', StringIO.new(book_copy.nav_doc), 'nav').add_property('nav') if version == 3
 
       book
     end
 
     def render_metadata
-      data = {
-          'Rating'              => rating,
-          'Language'            => language,
-          'Genres'              => genres.join(', '),
-          'Characters/Pairings' => characters,
-          'Chapter count'       => format_num(chapter_count),
-          'Word count'          => format_num(word_count),
-          'Reviews'             => "<a href='https://fanfiction.com/r/#{info_id}'>" + format_num(review_count) + '</a>',
-          'Favorites'           => format_num(favs_count),
-          'Follows'             => format_num(follows_count),
-          'Updated'             => updated_date,
-          'Published'           => published_date,
-          'ID'                  => info_id
-      }
+      data = Hash.new.tap do |h|
+        h['Rating']              = rating
+        h['Language']            = language
+        h['Genres']              = genres.join(', ')
+        h['Characters/Pairings'] = characters
+        h['Chapter count']       = format_num(chapter_count) if chapter_count
+        h['Word count']          = format_num(word_count)
+        h['Reviews']             = "<a href='https://fanfiction.com/r/#{info_id}'>" + format_num(review_count) + '</a>'
+        h['Favorites']           = format_num(favs_count)
+        h['Follows']             = format_num(follows_count)
+        h['Updated']             = updated_date if updated_date
+        h['Published']           = published_date
+        h['ID']                  = info_id
+      end
 
       Nokogiri::XML::Builder.new(encoding: 'utf-8') { |doc|
         doc.html('xmlns' => 'http://www.w3.org/1999/xhtml', 'xml:lang' => 'en') {
@@ -252,15 +255,14 @@ module Ficrip
             doc.title 'About'
           }
           doc.body {
+            doc.p { doc.strong 'Title';    doc.a(href: @url) { doc.text @title } }
             doc.p { doc.strong 'Author: '; doc.a(href: author_url) { doc.text @author } }
             doc.p { doc.strong 'Summary:'; doc.br; doc.text summary }
-            doc.ul {
+            doc.p {
               data.each do |k, v|
-                doc.li {
-                  doc.strong(k + ':')
-                  (v.to_s.start_with? '<a') ? doc << v.to_s : doc.text(' ' + v.to_s)
-                  doc.br
-                }
+                doc.strong(k + ':')
+                (v.to_s.start_with? '<a') ? doc << v.to_s : doc.text(' ' + v.to_s)
+                doc.br
               end
             }
           }
