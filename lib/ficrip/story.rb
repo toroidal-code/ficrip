@@ -95,11 +95,13 @@ module Ficrip
           cover.rewind # GEPUB::Book#add_item would appear to read and not rewind
           width, height = FastImage.size cover
           fragment = <<-XML.strip_heredoc
-            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-                 version="1.1" width="100%" height="100%"
-                 viewBox="0 0 #{width} #{height}" preserveAspectRatio="xMidYMid meet">
-              <image width="#{width}" height="#{height}" xlink:href="cover_image.#{cover_type}"></image>
-            </svg>
+            <div style="text-align: center;">
+              <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+                   version="1.1" width="100%" height="100%"
+                   viewBox="0 0 #{width} #{height}" preserveAspectRatio="xMidYMid meet">
+                <image width="#{width}" height="#{height}" xlink:href="cover_image.#{cover_type}"></image>
+              </svg>
+            </div>
           XML
         end
 
@@ -117,9 +119,7 @@ module Ficrip
               </style>
             </head>
             <body>
-              <div style="text-align: center;">
-                #{ fragment }
-              </div>
+              #{ fragment }
             </body>
           </html>
         XHTML
@@ -206,7 +206,7 @@ module Ficrip
       # removing references to the cover and TOC itself
       cut_idx = 1 # About is always generated
       cut_idx += 1 if @metadata.key?(:cover_url) # Cover
-      cut_idx -= 1 if table_of_contents.nil? # TOC
+      cut_idx += 1 unless table_of_contents.nil? # TOC
 
       book_copy = book.deep_clone
 
