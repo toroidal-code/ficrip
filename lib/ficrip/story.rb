@@ -66,7 +66,12 @@ module Ficrip
       book.creator  = @author
 
 
-      cover = cover.is_a?(String) ? cover.try {|c| open c }.result : cover
+      cover =
+          if cover.is_a?(String)
+            open(cover) rescue raise(ArgumentError.new("Could not open #{cover}"))
+          else
+            cover
+          end
 
 
       # Cover if it exists
@@ -80,18 +85,24 @@ module Ficrip
         book.add_item(format('img/cover_image.%s', cover_type), cover)
             .cover_image
 
-        normal_fragment = <<-XML.strip_heredoc
-          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1"
-               width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-            <image width="100%" height="100%" xlink:href="cover_image.#{cover_type}"></image>
-          </svg>
-        XML
+        if cover_type == :svg
+          fragment = <<-XML.strip_heredoc
+            <object type="image/svg+xml" data="cover_image.svg">
+              <!--<param name="src" value="cover_image.svg">-->
+            </object>
+          XML
+        else
+          cover.rewind # GEPUB::Book#add_item would appear to read and not rewind
+          width, height = FastImage.size cover
+          fragment = <<-XML.strip_heredoc
+            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+                 version="1.1" width="100%" height="100%"
+                 viewBox="0 0 #{width} #{height}" preserveAspectRatio="xMidYMid meet">
+              <image width="#{width}" height="#{height}" xlink:href="cover_image.#{cover_type}"></image>
+            </svg>
+          XML
+        end
 
-        svg_fragment = <<-XML.strip_heredoc
-          <object type="image/svg+xml" data="cover_image.svg">
-            <!--<param name="src" value="cover_image.svg">-->
-          </object>
-        XML
 
         coverpage = <<-XHTML.strip_heredoc
           <?xml version="1.0" encoding="utf-8"?>
@@ -107,7 +118,7 @@ module Ficrip
             </head>
             <body>
               <div style="text-align: center;">
-                #{ cover_type.equal?(:svg) ? svg_fragment : normal_fragment }
+                #{ fragment }
               </div>
             </body>
           </html>
