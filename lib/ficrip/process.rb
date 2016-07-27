@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require 'contracts'
 require 'open-uri'
 
@@ -15,6 +16,12 @@ module Ficrip
 
   Contract Or[Nat,String] => Story
   def self.fetch(storyid_or_url)
+
+    find_by_slice = lambda do |ary, str|
+      r = ary.find { |i| i.start_with? str }
+      r.gsub(str, '').strip if r
+    end
+
     storyid = begin
       storyid_or_url =~ Regexp.new('fanfiction.net/s/(\d+)', true)
       Integer ($1 || storyid_or_url)
@@ -28,7 +35,10 @@ module Ficrip
       Nokogiri::HTML open(base_url)
     end
 
-    raise(ArgumentError.new("Invalid StoryID #{storyid}")) if primary_page.css('#profile_top').count == 0
+    if primary_page.css('#profile_top').count == 0
+      puts open(base_url).read
+      raise(ArgumentError.new("Invalid StoryID #{storyid}"))
+    end
 
     title  = primary_page.css('#profile_top > b').first.text
     author = primary_page.css('#profile_top > a').first.text
@@ -39,32 +49,31 @@ module Ficrip
 
       info = primary_page.css('#profile_top > span.xgray.xcontrast_txt').text.split(' - ')
 
-      s.rating        = info.find_with 'Rated: Fiction'
+      s.rating        = find_by_slice.(info, 'Rated: Fiction')
       s.language      = info[1]
       s.genres        = info[2].split('/')
       s.characters    = info[3].strip
-      s.chapter_count = info.find_with('Chapters:').as { |c| c.parse_int unless c.nil? }
-      s.word_count    = info.find_with('Words:').parse_int
-      s.review_count  = info.find_with('Reviews:').parse_int
-      s.favs_count    = info.find_with('Favs:').parse_int
-      s.follows_count = info.find_with('Follows:').parse_int
+      s.chapter_count = find_by_slice.(info, 'Chapters:').try_this { |count| Integer(count) }.result
+      s.word_count    = find_by_slice.(info, 'Words:').try_this { |count| Integer(count) }.result
+      s.review_count  = find_by_slice.(info, 'Reviews:').try_this { |count| Integer(count) }.result
+      s.favs_count    = find_by_slice.(info, 'Favs:').try_this { |count| Integer(count) }.result
+      s.follows_count = find_by_slice.(info, 'Follows:').try_this { |count| Integer(count) }.result
 
       s.updated_date =
-          info.find_with('Updated:')
-              .try { |d| Date.strptime(d, '%m/%d/%Y') }
-              .try { |d| Date.strptime(d, '%m/%d') }
-              .try { |d| (Time.now - ChronicDuration.parse(d)).to_date }
+          find_by_slice.(info,'Updated:')
+              .try_this { |d| Date.strptime(d, '%m/%d/%Y') }
+              .and_this { |d| Date.strptime(d, '%m/%d') }
+              .and_this { |d| (Time.now - ChronicDuration.parse(d)).to_date }
               .result
 
       s.published_date =
-          info.find_with('Published:')
-              .try { |d| Date.strptime(d, '%m/%d/%Y') }
-              .try { |d| Date.strptime(d, '%m/%d') }
-              .try { |d| (Time.now - ChronicDuration.parse(d)).to_date }
+          find_by_slice.(info,'Published:')
+              .try_this { |d| Date.strptime(d, '%m/%d/%Y') }
+              .and_this { |d| Date.strptime(d, '%m/%d') }
+              .and_this { |d| (Time.now - ChronicDuration.parse(d)).to_date }
               .result
 
-
-      s.info_id = info.find_with('id:').to_i
+      s.info_id = find_by_slice.(info,'id:').to_i
 
       raise Exception.new("Error! StoryID and parsed ID don't match.") if s.info_id != storyid
 

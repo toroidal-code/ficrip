@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require 'contracts'
 require 'open-uri'
 require 'retryable'

@@ -1,17 +1,6 @@
-
-
-class Array
-  def find_with(str)
-    r = find { |i| i.start_with? str }
-    r.gsub(str, '').strip if r
-  end
-end
+# frozen_string_literal: true
 
 class String
-  def parse_int
-    gsub(/[^\d]/, '').to_i
-  end
-
   def strip_heredoc
     indent = scan(/^[ \t]*(?=\S)/).min.size || 0
     gsub(/^[ \t]{#{indent}}/, '')
@@ -19,11 +8,8 @@ class String
 end
 
 class Object
-  def as
-    yield self
-  end
-
   # From http://stackoverflow.com/a/8206537
+  # Rubinius-compatible
   def deep_clone
     return @deep_cloning_obj if @deep_cloning
     return self if instance_of?(String) && frozen?
@@ -46,24 +32,49 @@ class Object
   end
 end
 
-class Result
-  attr_accessor :result, :initial
-  def initialize(val, res = nil)
-    @initial = val
-    @result = res
+
+# Result class
+class Result < Delegator
+  attr_reader :result, :initial, :exceptions
+
+  def __getobj__
+    @result
   end
+
+  def initialize(initial, res = nil)
+    @initial = initial
+    @result = res
+    @exceptions = [nil]
+  end
+
+  def try_this(ignoring: StandardError)
+    ignoring = [ignoring].flatten
+    begin
+      @result = yield(@initial) if @result.nil?
+      @exceptions << nil
+    rescue *ignoring => e
+      @exceptions << e
+    rescue # Everything else
+      raise
+    end
+    self
+  end
+
+  alias and_this try_this
 end
 
+# Object class
 class Object
-  def try
+  def try_this(ignoring: StandardError)
+    ignoring = [ignoring].flatten
     begin
-      if instance_of? Result
-        return @result ? self : Result.new(@initial, yield(@initial))
-      else
-        return Result.new(self, yield(self))
+      Result.new self, yield(self)
+    rescue *ignoring => e
+      Result.new(self).tap do |r|
+        r.instance_variable_set :@exceptions, [e]
       end
-    rescue
-      return instance_of?(Result) ? self :  Result.new(self)
+    rescue # Everything else
+      raise
     end
   end
 end
