@@ -36,7 +36,6 @@ module Ficrip
     end
 
     if primary_page.css('#profile_top').count == 0
-      puts open(base_url).read
       raise(ArgumentError.new("Invalid StoryID #{storyid}"))
     end
 
