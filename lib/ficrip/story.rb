@@ -209,7 +209,7 @@ module Ficrip
       cut_idx += 1 if @metadata.key?(:cover_url) # Cover
       cut_idx += 1 unless table_of_contents.nil? # TOC
 
-      book_copy = book.deep_clone
+      book_copy = Marshal.load Marshal.dump(book)
 
       if table_of_contents
         book_copy.instance_variable_set(:@toc, book_copy.instance_variable_get(:@toc)[cut_idx..-1])
