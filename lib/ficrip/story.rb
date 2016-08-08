@@ -301,7 +301,7 @@ module Ficrip
     # end
 
     def format_num(num)
-      num.to_s.reverse.gsub(/...(?=.)/, '\&,').reverse
+      num.to_s.split('.').first.gsub(/(?<=\d)(?=(?:\d{3})+\z)/, ',')
     end
 
     def extract_first_option(regex)

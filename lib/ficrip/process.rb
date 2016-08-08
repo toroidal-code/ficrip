@@ -22,6 +22,12 @@ module Ficrip
       r.gsub(str, '').strip if r
     end
 
+    process_num = lambda do |str|
+      str.try_this do |count|
+        Integer(count.delete(',.'))
+      end.result
+    end
+
     storyid = begin
       storyid_or_url =~ Regexp.new('fanfiction.net/s/(\d+)', true)
       Integer ($1 || storyid_or_url)
@@ -52,11 +58,11 @@ module Ficrip
       s.language      = info[1]
       s.genres        = info[2].split('/')
       s.characters    = info[3].strip
-      s.chapter_count = find_by_slice.(info, 'Chapters:').try_this { |count| Integer(count) }.result
-      s.word_count    = find_by_slice.(info, 'Words:').try_this { |count| Integer(count) }.result
-      s.review_count  = find_by_slice.(info, 'Reviews:').try_this { |count| Integer(count) }.result
-      s.favs_count    = find_by_slice.(info, 'Favs:').try_this { |count| Integer(count) }.result
-      s.follows_count = find_by_slice.(info, 'Follows:').try_this { |count| Integer(count) }.result
+      s.chapter_count = process_num.call find_by_slice.(info, 'Chapters:')
+      s.word_count    = process_num.call find_by_slice.(info, 'Words:')
+      s.review_count  = process_num.call find_by_slice.(info, 'Reviews:')
+      s.favs_count    = process_num.call find_by_slice.(info, 'Favs:')
+      s.follows_count = process_num.call find_by_slice.(info, 'Follows:')
 
       s.updated_date =
           find_by_slice.(info,'Updated:')
