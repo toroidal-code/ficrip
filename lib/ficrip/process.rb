@@ -16,7 +16,6 @@ module Ficrip
 
   Contract Or[Nat,String] => Story
   def self.fetch(storyid_or_url)
-
     find_by_slice = lambda do |ary, str|
       r = ary.find { |i| i.start_with? str }
       r.gsub(str, '').strip if r

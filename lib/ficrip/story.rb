@@ -77,14 +77,14 @@ module Ficrip
 
       # Cover if it exists
       if cover || @metadata.key?(:cover_url)
-        mime_types = GEPUB::Mime.mime_types.map {|k,v| [extract_first_option(k).to_sym, v]}.to_h.invert
-        cover = open!(@metadata[:cover_url], 'Referer' => @url) unless cover
+        mime_types = GEPUB::Mime.mime_types.map { |k, v| [extract_first_option(k).to_sym, v] }.to_h.invert
+        cover ||= open!(@metadata[:cover_url], 'Referer' => @url)
         cover_type = FastImage.type(cover) || mime_types[MimeMagic.by_magic(cover)]
 
         raise ArgumentError.new('Type of cover image could not be determined') unless cover_type
 
-        book.add_item(format('img/cover_image.%s', cover_type), cover)
-            .cover_image
+        book.add_item(format('img/cover_image.%s', cover_type), cover).cover_image
+
 
         if cover_type == :svg
           fragment = <<-XML.strip_heredoc
@@ -148,7 +148,6 @@ module Ficrip
         </html>
       XHTML
 
-
       table_of_contents = nil
       book.ordered do
         book.add_item('img/coverpage.xhtml')
@@ -209,37 +208,43 @@ module Ficrip
       cut_idx += 1 if @metadata.key?(:cover_url) # Cover
       cut_idx += 1 unless table_of_contents.nil? # TOC
 
-      book_copy = Marshal.load Marshal.dump(book)
+      nav_doc = Nokogiri::XML(book.nav_doc) { |c| c.noblanks } # Load the nav_doc
+
+      # remove the extraneous list nodes
+      nav_doc.css('ol > li')[0...cut_idx].each(&:remove)
 
       if table_of_contents
-        book_copy.instance_variable_set(:@toc, book_copy.instance_variable_get(:@toc)[cut_idx..-1])
-
-
-        nav_doc = Nokogiri::XML(book_copy.nav_doc){|c| c.noblanks} # Load the nav_doc
+        toc_doc = nav_doc.dup
 
         # add a title element to the <head>
-        nav_doc.at_css('head').children.before  '<title>Table of Contents</title>'
+        toc_doc.at_css('head').children.before '<title>Table of Contents</title>'
 
         # remove the <nav> element moving  the children to <body>
-        nav_doc.at_css('nav').tap {|n| n.parent << n.children }.remove
+        toc_doc.at_css('nav').tap { |n| n.parent << n.children }.remove
 
         # Center the 'Table of Contents' at the top of the page
-        nav_doc.at('h1:contains("Table of Contents")')['style'] = 'text-align:center;'
+        toc_doc.at('h1:contains("Table of Contents")')['style'] = 'text-align:center;'
 
         # edit all of the links so they point to the right place
-        nav_doc.xpath("//@href[starts-with(.,'text/')]").each{|l| l.value = l.value.tap{|s| s.slice! 'text/'}}
+        toc_doc.xpath("//@href[starts-with(.,'text/')]").each do |l|
+          l.value = l.value.tap { |s| s.slice! 'text/' }
+        end
 
         # Finally, we get to add the actual content
-        table_of_contents.add_content(StringIO.new(nav_doc.to_xhtml(indent: 2)))
+        table_of_contents.add_content(StringIO.new(toc_doc.to_xhtml(indent: 2)))
+      end
+
+      if version == 3
+        book.add_item('nav.html', StringIO.new(nav_doc.to_xhtml(indent: 2)), 'nav').add_property('nav')
       end
 
       # Now that we've generated the TOC page, go through every chapter reference in the
       # toc and prepend the chapter number. This is for the epub's built-in table of contents
-      book.instance_variable_get(:@toc)[cut_idx..-1].each_with_index do |chap, idx|
-        chap[:text] = "#{idx + 1}. #{chap[:text]}"
-      end if chapters.count > 1
-
-      book.add_item('nav.html', StringIO.new(book_copy.nav_doc), 'nav').add_property('nav') if version == 3
+      if chapters.count > 1
+        book.instance_variable_get(:@toc)[cut_idx..-1].each_with_index do |chap, idx|
+          chap[:text] = "#{idx + 1}. #{chap[:text]}"
+        end
+      end
 
       book
     end
@@ -283,6 +288,7 @@ module Ficrip
     end
 
     private
+
     def open!(*args, &block)
       Retryable.retryable(tries: :infinite, on: OpenURI::HTTPError) do
         open(*args, &block)
