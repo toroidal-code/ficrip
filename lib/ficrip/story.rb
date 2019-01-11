@@ -78,7 +78,7 @@ module Ficrip
       # Cover if it exists
       if cover || @metadata.key?(:cover_url)
         mime_types = GEPUB::Mime.mime_types.map { |k, v| [extract_first_option(k).to_sym, v] }.to_h.invert
-        cover ||= open!(@metadata[:cover_url], 'Referer' => @url)
+        cover ||= open!(@metadata[:cover_url]) #, 'Referer' => @url)
         cover_type = FastImage.type(cover) || mime_types[MimeMagic.by_magic(cover)]
 
         raise ArgumentError.new('Type of cover image could not be determined') unless cover_type

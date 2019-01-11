@@ -34,7 +34,7 @@ module Ficrip
       raise ArgumentError.new("\"#{storyid_or_url}\" is not a fanfiction.net URL or a StoryID")
     end
 
-    base_url = "https://www.fanfiction.net/s/#{storyid}/"
+    base_url = "https://www.fanfictionproxy.net/s/#{storyid}/"
 
     primary_page = Retryable.retryable(tries: :infinite, on: OpenURI::HTTPError) do
       Nokogiri::HTML open(base_url)
