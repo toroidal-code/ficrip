@@ -9,6 +9,7 @@ require 'chronic_duration'
 require 'retryable'
 
 require_relative 'extensions'
+require_relative 'flaresolverr'
 
 module Ficrip
   include Contracts::Core
@@ -37,7 +38,7 @@ module Ficrip
     base_url = "https://www.fanfiction.net/s/#{storyid}/"
 
     primary_page = Retryable.retryable(tries: :infinite, on: OpenURI::HTTPError) do
-      Nokogiri::HTML open(base_url)
+      Nokogiri::HTML @@solverr.get(base_url)
     end
 
     if primary_page.css('#profile_top').count == 0
@@ -97,5 +98,16 @@ module Ficrip
   Contract Or[Nat,String] => GEPUB::Book
   def self.get(storyid_or_url, version: 3)
     fetch(storyid_or_url).bind(version: version)
+  end
+
+  @@solverr = nil
+  
+  Contract Nat => FlareSolverr
+  def self.set_solverr(port)
+    @@solverr = FlareSolverr.new(port)
+  end
+
+  def self.solverr
+    return @@solverr
   end
 end

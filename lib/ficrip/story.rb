@@ -6,6 +6,7 @@ require 'gepub'
 require 'mimemagic'
 
 require_relative 'extensions'
+require_relative 'flaresolverr'
 
 module Ficrip
   class Story
@@ -55,9 +56,9 @@ module Ficrip
       self
     end
 
-    Contract KeywordArgs[version:  Optional[Or[2, 3]],
-                         cover:    Optional[Maybe[Or[File, Tempfile, String]]],
-                         callback: Optional[Proc]] => GEPUB::Book
+    #Contract KeywordArgs[version:  Optional[Or[2, 3]],
+    #                     cover:    Optional[Maybe[Or[File, Tempfile, String]]],
+    #                     callback: Optional[Proc]] => GEPUB::Book
     def bind(version: 3, cover: nil, callback: nil)
       book = GEPUB::Book.new('OEPBS/package.opf', 'version' => version.to_f.to_s)
       book.primary_identifier(@url, 'BookId', 'URL')
@@ -78,7 +79,7 @@ module Ficrip
       # Cover if it exists
       if cover || @metadata.key?(:cover_url)
         mime_types = GEPUB::Mime.mime_types.map { |k, v| [extract_first_option(k).to_sym, v] }.to_h.invert
-        cover ||= open!(@metadata[:cover_url], 'Referer' => @url)
+        cover ||= URI::open(@metadata[:cover_url].to_s, 'Referer' => @url)
         cover_type = FastImage.type(cover) || mime_types[MimeMagic.by_magic(cover)]
 
         raise ArgumentError.new('Type of cover image could not be determined') unless cover_type
@@ -167,7 +168,7 @@ module Ficrip
 
         chapters.each do |chapter|
           chapter_num, chapter_title = chapter.match(/^(\d+)\s*[-\\.)]?\s+(.*)/).captures
-          chapter_page               = Nokogiri::HTML open!(URI.join(@url, chapter_num))
+          chapter_page               = Nokogiri::HTML open!(URI.join(@url, chapter_num).to_s)
 
           storytext = chapter_page.css('#storytext').first
           storytext.xpath('//@noshade').remove
@@ -289,9 +290,9 @@ module Ficrip
 
     private
 
-    def open!(*args, &block)
-      Retryable.retryable(tries: :infinite, on: OpenURI::HTTPError) do
-        open(*args, &block)
+    def open!(url)
+      Retryable.retryable(tries: :infinite, on: FlareSolverr::FlareSolverrError) do
+        Ficrip.solverr.get(url)
       end
     end
 

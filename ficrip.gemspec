@@ -18,15 +18,16 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_dependency 'nokogiri', '~> 1.6'
-  spec.add_dependency 'ruby-progressbar', '~> 1.8'
+  spec.add_dependency 'ruby-progressbar', '~> 1.11'
   spec.add_dependency 'gepub', '0.7.0beta3'
-  spec.add_dependency 'slop', '~> 4.3'
-  spec.add_dependency 'contracts', '~> 0.14'
-  spec.add_dependency 'i18n_data', '~> 0.7'
-  spec.add_dependency 'fastimage', '~> 2.0'
+  spec.add_dependency 'slop', '~> 4.8'
+  spec.add_dependency 'contracts', '~> 0.16'
+  spec.add_dependency 'i18n_data', '~> 0.13'
+  spec.add_dependency 'fastimage', '~> 2.2'
   spec.add_dependency 'chronic_duration', '~> 0.10'
-  spec.add_dependency 'retryable', '~> 2.0'
+  spec.add_dependency 'retryable', '~> 3.0'
   spec.add_dependency 'mimemagic', '~> 0.3'
+  spec.add_dependency 'oj', '~> 3.0'
 
   spec.add_development_dependency 'bundler'
   spec.add_development_dependency 'rake'
