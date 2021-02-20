@@ -102,9 +102,9 @@ module Ficrip
 
   @@solverr = nil
   
-  Contract Nat => FlareSolverr
-  def self.set_solverr(port)
-    @@solverr = FlareSolverr.new(port)
+  Contract String, Nat => FlareSolverr
+  def self.set_solverr(host, port)
+    @@solverr = FlareSolverr.new(host, port)
   end
 
   def self.solverr

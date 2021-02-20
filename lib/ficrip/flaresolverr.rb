@@ -6,11 +6,11 @@ require 'oj'
 class FlareSolverr
   class FlareSolverrError < StandardError; end
   attr_accessor :session_id
-  def initialize(port, api_ver=1)
+  def initialize(host='localhost', port=8191, api_ver=1)
     @port = port
     @api_ver = api_ver
     @session_id = nil
-    @uri = URI("http://localhost:#{@port}/v#{api_ver}")
+    @uri = URI("http://#{host}:#{@port}/v#{api_ver}")
   end
 
   def get(url)
