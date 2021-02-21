@@ -84,7 +84,7 @@ module Ficrip
 
         raise ArgumentError.new('Type of cover image could not be determined') unless cover_type
 
-        book.add_item(format('img/cover_image.%s', cover_type), cover).cover_image
+        book.add_item(format('img/cover_image.%s', cover_type), content: cover).cover_image
 
 
         if cover_type == :svg
@@ -191,7 +191,7 @@ module Ficrip
             </html>
           XHTML
 
-          book.add_item(format('text/chapter%03d.xhtml', chapter_num), nil, "c#{chapter_num}")
+          book.add_item(format('text/chapter%03d.xhtml', chapter_num), content: nil, id: "c#{chapter_num}")
               .add_content(StringIO.new(Nokogiri::XML(chapter_xhtml) { |c| c.noblanks }.to_xhtml(indent: 2)))
               .toc_text(chapter_title)
 
@@ -236,7 +236,7 @@ module Ficrip
       end
 
       if version == 3
-        book.add_item('nav.html', StringIO.new(nav_doc.to_xhtml(indent: 2)), 'nav').add_property('nav')
+        book.add_item('nav.html', content: StringIO.new(nav_doc.to_xhtml(indent: 2)), id: 'nav').add_property('nav')
       end
 
       # Now that we've generated the TOC page, go through every chapter reference in the

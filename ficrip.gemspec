@@ -19,7 +19,7 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency 'nokogiri', '~> 1.6'
   spec.add_dependency 'ruby-progressbar', '~> 1.11'
-  spec.add_dependency 'gepub', '0.7.0beta3'
+  spec.add_dependency 'gepub', '1.0.13'
   spec.add_dependency 'slop', '~> 4.8'
   spec.add_dependency 'contracts', '~> 0.16'
   spec.add_dependency 'i18n_data', '~> 0.13'

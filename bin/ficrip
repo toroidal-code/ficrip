@@ -41,7 +41,7 @@ storyids = opts.args.map do |a|
 end
 
 exit -1 if $errored
-puts opts[:flaresolverr_port]
+
 Ficrip.set_solverr('localhost', opts[:flaresolverr_port])
 Ficrip.solverr.open!
 
